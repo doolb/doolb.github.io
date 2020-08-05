@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>一个透视立方体</title>
+    <!-- by do_olb -->
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            /* 隐藏body窗口区域滚动条 */
+        }
+    </style>
+</head>
+
+<body>
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.108.0/build/three.module.js';
+        import { OrbitControls } from 'https://unpkg.com/three@0.108.0/examples/jsm/controls/OrbitControls.js';
+        import { GUI } from 'https://unpkg.com/three@0.108.0/examples/jsm/libs/dat.gui.module.js';
+
+        /**
+             * 创建场景对象Scene
+             */
+        var scene = new THREE.Scene();
+        /**
+             * 创建网格模型
+             */
+        // 立方体网格模型
+        var geometry1 = new THREE.BoxGeometry(100, 100, 100);
+        var material1 = new THREE.MeshPhongMaterial({
+            color: 0x666666,//材质颜色
+            transparent: true,//开启透明度
+            opacity: 0.75,//设置透明度具体值
+            specular: 0x666666
+        }); //材质对象Material
+        var mesh1 = new THREE.Mesh(geometry1, material1); //网格模型对象Mesh
+        scene.add(mesh1); //网格模型添加到场景中
+
+        var wireframe = new THREE.EdgesGeometry(geometry1);
+        var line = new THREE.LineSegments(wireframe);
+        line.material.depthTest = false;
+        line.material.opacity = 0.6;
+        line.material.transparent = true;
+        scene.add(line);
+
+        // 辅助坐标系
+        var axisHelper = new THREE.AxesHelper(250);
+
+        //reset axes colors
+        var colors = axisHelper.geometry.attributes.color;
+
+        // 美术定义
+        colors.setXYZ(0, 1, 0, 0); // index, R, G, B
+        colors.setXYZ(1, 1, 0, 0); // red
+        colors.setXYZ(2, 0, 0, 1);
+        colors.setXYZ(3, 0, 0, 1); // green
+        colors.setXYZ(4, 0, 1, 0);
+        colors.setXYZ(5, 0, 1, 0); // blue
+
+        scene.add(axisHelper);
+
+        createText(scene, 'X', 0xff0000, [240, -9, 0], 18);
+        createText(scene, 'Y', 0x00ff00, [-9, -9, 250], 18);
+        createText(scene, 'Z', 0x0000ff, [-9, 250, 0], 18);
+
+        // plane
+
+        /**
+             * 光源设置
+             */
+        //点光源
+        var point = new THREE.PointLight(0xffffff);
+        point.position.set(400, 200, 300); //点光源位置
+        scene.add(point); //点光源添加到场景中
+        //环境光
+        var ambient = new THREE.AmbientLight(0x444444);
+        scene.add(ambient);
+        /**
+             * 相机设置
+             */
+        var width = window.innerWidth; //窗口宽度
+        var height = window.innerHeight; //窗口高度
+        var k = width / height; //窗口宽高比
+        var s = 150; //三维场景显示范围控制系数，系数越大，显示的范围越大
+        //创建相机对象
+        var camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000000);
+        camera.position.set(200, 300, 200); //设置相机位置
+        camera.lookAt(line.position); //设置相机方向(指向的场景对象)
+        /**
+             * 创建渲染器对象
+             */
+        var renderer = new THREE.WebGLRenderer();
+        renderer.setSize(width, height); //设置渲染区域尺寸
+        renderer.setClearColor(0xaaaaaa, 1); //设置背景颜色
+        document.body.appendChild(renderer.domElement); //body元素中插入canvas对象
+
+        var controls = new OrbitControls(camera, renderer.domElement); //创建控件对象
+        controls.target.set(0, 0, 0);
+        controls.update();
+        controls.enablePan = false;
+        //controls.enableDamping = true;
+
+        var PerspectLine = createLine();
+
+        // GUI
+        var uiItem = new function () {
+            this.cameraHor = controls.getAzimuthalAngle() * 180 / Math.PI;
+            this.cameraVer = controls.getPolarAngle() * 180 / Math.PI;
+            this.cameraFov = camera.fov;
+
+            this.cubeX = 0;
+            this.cubeY = 0;
+            this.cubeZ = 0;
+            this.cubeRotX = 0;
+            this.cubeRotY = 0;
+            this.cubeRotZ = 0;
+        };
+        var gui = new GUI();
+        gui.add(uiItem, 'cameraHor', 0, 360).name("摄像机水平角度").listen();
+        gui.add(uiItem, 'cameraVer', 0, 180).name("摄像机垂直角度").listen();
+        gui.add(uiItem, 'cameraFov', 10, 170).name("摄像机视野角度").onChange(function (value) { camera.fov = value; controls.update(); camera.updateProjectionMatrix(); });
+
+        // ！！！ 旋转角度，Z在上，美术定义
+        gui.add(uiItem, 'cubeRotX', 0, 90).name("立方体 X 角度").onChange(function (value) { setRotate(value, [1, 0, 0]) });
+        gui.add(uiItem, 'cubeRotY', 0, 90).name("立方体 Y 角度").onChange(function (value) { setRotate(value, [0, 0, 1]) });
+        gui.add(uiItem, 'cubeRotZ', 0, 90).name("立方体 Z 角度").onChange(function (value) { setRotate(value, [0, 1, 0]) });
+
+        gui.add(uiItem, 'cubeX', -10, 10).name("立方体 X 位移").onChange(function (value) { setTranslate([value, uiItem.cubeY, uiItem.cubeZ]) });
+        gui.add(uiItem, 'cubeZ', -10, 10).name("立方体 Y 位移").onChange(function (value) { setTranslate([uiItem.cubeX, uiItem.cubeY, value]) });
+        gui.add(uiItem, 'cubeY', -10, 10).name("立方体 Z 位移").onChange(function (value) { setTranslate([uiItem.cubeX, value, uiItem.cubeZ]) });
+
+
+        // 渲染函数
+        function render() {
+
+            // update
+            uiItem.cameraHor = controls.getAzimuthalAngle() * 180 / Math.PI;
+            uiItem.cameraVer = controls.getPolarAngle() * 180 / Math.PI;
+
+            renderer.render(scene, camera); //执行渲染操作
+            controls.update();
+
+            requestAnimationFrame(render); //请求再次执行渲染函数render，渲染下一帧
+        }
+        render();
+
+        function onWindowResize() {
+            camera.aspect = width / height;;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height)
+        }
+
+        window.addEventListener('resize', onWindowResize);
+
+        function setRotate(angle, axis) {
+            var quaternion = new THREE.Quaternion();
+            quaternion.setFromAxisAngle(new THREE.Vector3(axis[0], axis[1], axis[2]), angle / 180 * Math.PI);
+            quaternion.normalize();
+            mesh1.quaternion.slerp(quaternion, 1);
+            line.quaternion.slerp(quaternion, 1);
+            PerspectLine.X.quaternion.slerp(quaternion, 1);
+            PerspectLine.Y.quaternion.slerp(quaternion, 1);
+            PerspectLine.Z.quaternion.slerp(quaternion, 1);
+        }
+        function setTranslate(axis) {
+            mesh1.position.set(100 * axis[0], 100 * axis[1], 100 * axis[2]);
+            line.position.set(100 * axis[0], 100 * axis[1], 100 * axis[2]);
+            PerspectLine.X.position.set(100 * axis[0], 100 * axis[1], 100 * axis[2]);
+            PerspectLine.Y.position.set(100 * axis[0], 100 * axis[1], 100 * axis[2]);
+            PerspectLine.Z.position.set(100 * axis[0], 100 * axis[1], 100 * axis[2]);
+        }
+
+        function createText(scene, txt, color, pos, size) {
+            var loader = new THREE.FontLoader();
+
+            loader.load('https://unpkg.com/three@0.108.0/examples/fonts/helvetiker_regular.typeface.json', function (font) {
+
+                var textGeometry = new THREE.TextGeometry(txt, {
+                    font: font,
+                    size: size,
+                    height: 2
+                });
+                var textMaterial = new THREE.MeshPhongMaterial(
+                    { color: color, specular: 0xffffff }
+                );
+
+                var mesh = new THREE.Mesh(textGeometry, textMaterial);
+                scene.add(mesh);
+                mesh.position.set(pos[0], pos[1], pos[2]);
+            });
+        }
+
+        function createLine() {
+            var material = new THREE.LineBasicMaterial({
+                color: 0x00ff00
+            });
+
+            var points = [];
+            points.push(new THREE.Vector3(50, -50, 50));
+            points.push(new THREE.Vector3(50, -50, -900000));
+            points.push(new THREE.Vector3(50, 50, 50));
+            points.push(new THREE.Vector3(50, 50, -900000));
+            points.push(new THREE.Vector3(50, 0, -900000));
+            points.push(new THREE.Vector3(-900000, 0, 50));
+            //points.push(new THREE.Vector3(10, 0, 0));
+
+            var geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+            var lineY = new THREE.LineSegments(geometry, material);
+            scene.add(lineY);
+
+            var material = new THREE.LineBasicMaterial({
+                color: 0xff0000
+            });
+
+            var points = [];
+            points.push(new THREE.Vector3(50, -50, 50));
+            points.push(new THREE.Vector3(-900000, -50, 50));
+            points.push(new THREE.Vector3(50, 50, 50));
+            points.push(new THREE.Vector3(-900000, 50, 50));
+            //points.push(new THREE.Vector3(10, 0, 0));
+
+            var geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+            var lineX = new THREE.LineSegments(geometry, material);
+            scene.add(lineX);
+
+            var material = new THREE.LineBasicMaterial({
+                color: 0x0000ff
+            });
+
+            var points = [];
+            points.push(new THREE.Vector3(-50, 50, 50));
+            points.push(new THREE.Vector3(-50, -900000, 50));
+            points.push(new THREE.Vector3(50, 50, -50));
+            points.push(new THREE.Vector3(50, -900000, -50));
+            //points.push(new THREE.Vector3(10, 0, 0));
+
+            var geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+            var lineZ = new THREE.LineSegments(geometry, material);
+            scene.add(lineZ);
+
+            return{
+                Y: lineY,
+                X: lineX,
+                Z: lineZ
+            }
+        }
+    </script>
+</body>
+
+</html>
