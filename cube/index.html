@@ -4,7 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <title>一个透视立方体</title>
-    <!-- by do_olb -->
+    <!-- by do_olb 
+        todo: calc cube length div lose point
+    -->
     <style>
         body {
             margin: 0;
@@ -15,7 +17,40 @@
 </head>
 
 <body>
-    <div id="uiText"></div>
+    <div id="uiText">
+        <div id="uiText-vert"></div>
+        <div id="uiText-line"></div>
+        <div id="uiText-face"></div>
+    </div>
+
+    <table id="camea-angel" style="position: fixed;">
+        <tbody>
+            <tr>
+                <td><input type="button" onclick="changeCamera_angel(0,0)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(22.5,0)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(45,0)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(67.5,0)" /></td>
+            </tr>
+            <tr>
+                <td><input type="button" onclick="changeCamera_angel(0,22.5)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(22.5,22.5)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(45,22.5)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(67.5,22.5)" /></td>
+            </tr>
+            <tr>
+                <td><input type="button" onclick="changeCamera_angel(0,45)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(22.5,45)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(45,45)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(67.5,45)" /></td>
+            </tr>
+            <tr>
+                <td><input type="button" onclick="changeCamera_angel(0,67.5)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(22.5,67.5)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(45,67.5)" /></td>
+                <td><input type="button" onclick="changeCamera_angel(67.5,67.5)" /></td>
+            </tr>
+        </tbody>
+    </table>
     <script type="module">
         import * as THREE from 'https://unpkg.com/three@0.108.0/build/three.module.js';
         import { OrbitControls } from 'https://unpkg.com/three@0.108.0/examples/jsm/controls/OrbitControls.js';
@@ -115,11 +150,14 @@
         var PerspectLine = createLine();
 
         var uiText = createLengthText();
+        window.uiText = uiText;
         controls.addEventListener("change", function () { updateUIText(uiText) });
+
         // GUI
         var uiItem = new function () {
             this.cameraHor = controls.getAzimuthalAngle() * 180 / Math.PI;
             this.cameraVer = 90 - controls.getPolarAngle() * 180 / Math.PI;
+            this.cameraDis = 0;
             this.cameraFov = camera.fov;
 
             this.cubeX = 0;
@@ -129,11 +167,21 @@
             this.cubeRotY = 0;
             this.cubeRotZ = 0;
 
-            this.showUIText = true;
+            this.showUIText_vert = false;
+            this.showUIText_line = true;
+            this.showUIText_face = true;
+
+            this.showCamera_angel = false;
+
+            this.line_percent_base = 0;
+            this.face_percent_base = 0;
+
         };
+        window.config = uiItem;
         var gui = new GUI();
         gui.add(uiItem, 'cameraHor', 0, 360).name("摄像机水平角度").listen();
         gui.add(uiItem, 'cameraVer', -90, 90).name("摄像机垂直角度").listen();
+        gui.add(uiItem, 'cameraDis').name("摄像机和原点距离").listen();
         gui.add(uiItem, 'cameraFov', 10, 170).name("摄像机视野角度").onChange(function (value) { camera.fov = value; controls.update(); camera.updateProjectionMatrix(); updateUIText(uiText); });
 
         // ！！！ 旋转角度，Z在上，美术定义
@@ -145,8 +193,15 @@
         gui.add(uiItem, 'cubeZ', -10, 10).name("立方体 Y 位移").onChange(function (value) { setTranslate([uiItem.cubeX, uiItem.cubeY, value]); updateUIText(uiText); });
         gui.add(uiItem, 'cubeY', -10, 10).name("立方体 Z 位移").onChange(function (value) { setTranslate([uiItem.cubeX, value, uiItem.cubeZ]); updateUIText(uiText); });
 
-        gui.add(uiItem, 'showUIText', -10, 10).name("显示辅助信息").onChange(function (value) { toggleUIText(value); });
+        gui.add(uiItem, 'showUIText_vert').name("显示点辅助信息").onChange(function (value) { toggleUIText_vert(value); }); toggleUIText_vert(uiItem.showUIText_vert);
+        gui.add(uiItem, 'showUIText_line').name("显示线辅助信息").onChange(function (value) { toggleUIText_line(value); });
+        gui.add(uiItem, 'showUIText_face').name("显示面辅助信息").onChange(function (value) { toggleUIText_face(value); });
+        // todo: change angel by code
+        //gui.add(uiItem, 'showCamera_angel').name("显示4x4快捷角度按钮").onChange(function (value) { toggleCamera_angel(value); }); 
+        toggleCamera_angel(uiItem.showCamera_angel);
 
+        gui.add(uiItem, 'line_percent_base').name("最大边长").listen();
+        gui.add(uiItem, 'face_percent_base').name("最大面积").listen();
 
         // 渲染函数
         function render() {
@@ -154,6 +209,7 @@
             // update
             uiItem.cameraHor = controls.getAzimuthalAngle() * 180 / Math.PI;
             uiItem.cameraVer = 90 - controls.getPolarAngle() * 180 / Math.PI;
+            uiItem.cameraDis = camera.position.distanceTo(controls.target);
 
             renderer.render(scene, camera); //执行渲染操作
             controls.update();
@@ -279,6 +335,7 @@
                 line_bot_face: [2, 3, 6, 7, 2],
                 lines: [],
                 lines_idcs: [],
+                line_length: [], // cache line length for each update
                 face_idcs: [
                     [0, 2, 3, 1],
                     [5, 7, 2, 0],
@@ -287,56 +344,65 @@
                     [5, 0, 1, 4],
                     [2, 3, 6, 7]
                 ],
+                faces_pos: [],
+                face_area: [], // cache face area for each update
                 faces: []
             }
+            var vert_node = document.getElementById("uiText-vert");
             for (let i = 0; i < window.data.geometry.vertices.length; i++) {
-                uiText.vertices.push(_createText(i.toString()));
+                uiText.vertices.push(_createText(i.toString(), vert_node));
             }
 
+            var line_node = document.getElementById("uiText-line");
             for (let i = 0; i < 4; i++) {
                 var f = uiText.line_top_face[i];
                 var t = uiText.line_top_face[i + 1];
                 uiText.lines_idcs.push([f, t]);
-                var t = _createText();
+                var t = _createText("", line_node);
+                setCol(t, "azure");
                 uiText.lines.push(t);
+                uiText.line_length.push(0);
             }
             for (let i = 0; i < 4; i++) {
                 var f = uiText.line_bot_face[i];
                 var t = uiText.line_bot_face[i + 1];
                 uiText.lines_idcs.push([f, t]);
-                var t = _createText();
-                //setCol(t, "#edd0d4");
+                var t = _createText("", line_node);
+                setCol(t, "azure");
                 uiText.lines.push(t);
+                uiText.line_length.push(0);
             }
             for (let i = 0; i < 4; i++) {
                 var f = uiText.line_top_face[i];
                 var t = uiText.line_bot_face[i];
                 uiText.lines_idcs.push([f, t]);
-                var t = _createText();
-                //setCol(t, "#edd0d4");
+                var t = _createText("", line_node);
+                setCol(t, "azure");
                 uiText.lines.push(t);
+                uiText.line_length.push(0);
             }
 
-            return uiText;
-            // todo: face
+            var face_node = document.getElementById("uiText-face");
+            // face
             for (let i = 0; i < uiText.face_idcs.length; i++) {
-                var a = window.data.geometry.vertices[uiText.face_idcs[i][0]].clone().applyMatrix4(window.data.matrixWorld);
-                a.add(window.data.geometry.vertices[uiText.face_idcs[i][1]].clone().applyMatrix4(window.data.matrixWorld));
-                a.add(window.data.geometry.vertices[uiText.face_idcs[i][2]].clone().applyMatrix4(window.data.matrixWorld));
-                a.add(window.data.geometry.vertices[uiText.face_idcs[i][3]].clone().applyMatrix4(window.data.matrixWorld));
+                var a = window.data.geometry.vertices[uiText.face_idcs[i][0]].clone();
+                a.add(window.data.geometry.vertices[uiText.face_idcs[i][1]]);
+                a.add(window.data.geometry.vertices[uiText.face_idcs[i][2]]);
+                a.add(window.data.geometry.vertices[uiText.face_idcs[i][3]]);
                 a.divideScalar(4);
                 uiText.faces_pos.push(a);
 
                 var v = a;
-                var t = _createText(v.x / window.box_size + "," + v.y / window.box_size + "," + v.z / window.box_size);
+                var t = _createText(v.x / window.box_size + "," + v.y / window.box_size + "," + v.z / window.box_size, face_node);
                 setCol(t, "#edd0d4");
                 uiText.faces.push(t);
+                uiText.face_area.push(0);
             }
             return uiText;
         }
 
         // ref:https://stackoverflow.com/questions/15248872/dynamically-create-2d-text-in-three-js
-        function _createText(txt) {
+        function _createText(txt, parent) {
             var text2 = document.createElement('div');
             text2.style.position = 'absolute';
             //text2.style.zIndex = 1;    // if you still don't see the label, try uncommenting this
@@ -347,14 +413,31 @@
             text2.style.top = 200 + 'px';
             text2.style.left = 200 + 'px';
             text2.style.pointerEvents = "none";
-            document.getElementById("uiText").appendChild(text2);
+            //document.getElementById("uiText").appendChild(text2);
+            parent.appendChild(text2);
             //document.body
 
             return text2;
         }
 
-        function toggleUIText(show) {
-            document.getElementById("uiText").style.display = show ? "block" : "none";
+        function toggleUIText_vert(show) {
+            document.getElementById("uiText-vert").style.display = show ? "block" : "none";
+            if (show) updateUIText(window.uiText);
+        }
+        function toggleUIText_line(show) {
+            document.getElementById("uiText-line").style.display = show ? "block" : "none";
+            if (show) updateUIText(window.uiText);
+        }
+        function toggleUIText_face(show) {
+            document.getElementById("uiText-face").style.display = show ? "block" : "none";
+            if (show) updateUIText(window.uiText);
+        }
+        function toggleCamera_angel(show) {
+            document.getElementById("camea-angel").style.display = show ? "block" : "none";
+        }
+
+        function changeCamera_angel(h, v) {
+
         }
 
         function updateUIText(uiText) {
@@ -363,13 +446,14 @@
                 var v = window.data.geometry.vertices[i].clone().applyMatrix4(window.data.matrixWorld);
                 var t = toXYCoords(v);
                 vertices.push(t); // store current position, we will use it later
-                setTxt(uiText.vertices[i], "");
+                //setTxt(uiText.vertices[i], "");
                 setXY(uiText.vertices[i], t);
             }
-            
+
             // line length and angle
             var h = new THREE.Vector3(1, 0, 0);
             var hv = new THREE.Vector3(0, 1, 0);
+            window.config.line_percent_base = -1;
             for (let i = 0; i < uiText.lines.length; i++) {
 
                 var a = vertices[uiText.lines_idcs[i][0]].clone();
@@ -383,7 +467,11 @@
                 // length
                 var a = vertices[uiText.lines_idcs[i][0]];
                 var b = vertices[uiText.lines_idcs[i][1]];
-                var d = a.distanceTo(b) | 0;
+                var d = a.distanceTo(b);
+                uiText.line_length[i] = d;
+                if (d > window.config.line_percent_base)
+                    window.config.line_percent_base = d;
+                d = d | 0;
 
                 // c = a - b;
                 var c = new THREE.Vector3(0, 0, 0);
@@ -420,26 +508,43 @@
 
 
 
-                //setTxt(uiText.lines[i], d + "," + (c.x | 0) + "," + (c.y | 0) + ":" + r + "°");
-                setTxt(uiText.lines[i], d + ":" + r + "°");
+                //setTxt(uiText.lines[i], d + ",(" + (c.x | 0) + "," + (c.y | 0) + "," + ((c.z * 10000) | 0) + "):" + r + "°");
+                //setTxt(uiText.lines[i], d + ":" + r + "°"); later
             }
 
-            return;
-            // todo: face volume block now
+            // show length
+            for (var i = 0; i < uiText.lines.length; i++) {
+                var d = (uiText.line_length[i] / window.config.line_percent_base * 100) | 0;
+                setTxt(uiText.lines[i], d + "% : " + r + "°");
+            }
+
+            window.config.face_percent_base = -1;
+            // face volume block now
             for (let i = 0; i < uiText.faces.length; i++) {
-                var v = uiText.faces_pos[i];
+                var v = uiText.faces_pos[i].clone().applyMatrix4(window.data.matrixWorld);
                 var t = toXYCoords(v);
-                setXY(uiText.faces[i], t);
                 var d = calcRectSize(vertices, uiText.face_idcs[i]);
-                d /= 100;
-                setTxt(uiText.faces[i], (d | 0) + "%");
+                uiText.face_area[i] = d.size;
+                if (d.size > window.config.face_percent_base)
+                    window.config.face_percent_base = d.size;
+                var c = d.vec;
+                // todo show face rot
+                setXY(uiText.faces[i], t);
+            }
+
+            // show area
+            for (var i = 0; i < uiText.faces.length; i++) {
+                var d = (uiText.face_area[i] / window.config.face_percent_base * 100) | 0;
+                setTxt(uiText.faces[i], d + "%");
             }
         }
         function setXY(uiText, pos, rot) {
             uiText.style.left = pos.x + 'px';
             uiText.style.top = pos.y + 'px';
             var z = 1 - (pos.z * 100 - 99);
+            // todo: calc fontsize
             uiText.style.fontSize = (z * 250 - window.camera.fov) + "px";
+            //uiText.style.fontSize = le + "px";
 
             //if (rot)
             //uiText.style.transform = "rotate(" + -rot + "deg) " + "translate(-50%, 0)";
@@ -462,21 +567,38 @@
             return vector;
         }
         function calcRectSize(vertices, face_icds) {
-            var va = vertices[face_icds[0]];
-            var vb = vertices[face_icds[1]];
-            var vc = vertices[face_icds[2]];
-            var vd = vertices[face_icds[3]];
+            var pa = vertices[face_icds[0]];
+            var pb = vertices[face_icds[1]];
+            var pc = vertices[face_icds[2]];
+            var pd = vertices[face_icds[3]];
+
+            var va = new window.gl.Vector3(0, 0, 0).subVectors(pb, pa);
+            var vb = new window.gl.Vector3(0, 0, 0).subVectors(pc, pb);
+            var vc = new window.gl.Vector3(0, 0, 0).subVectors(pd, pc);
+            var vd = new window.gl.Vector3(0, 0, 0).subVectors(pa, pd);
 
             var ra = va.angleTo(vb);
             var rc = vc.angleTo(vd);
 
-            var la = va.distanceTo(vb);
-            var lb = vb.distanceTo(vc);
-            var lc = vc.distanceTo(vd);
-            var ld = vd.distanceTo(va);
+            var la = pa.distanceTo(pb);
+            var lb = pb.distanceTo(pc);
+            var lc = pc.distanceTo(pd);
+            var ld = pd.distanceTo(pa);
 
             var area = 0.5 * la * lb * Math.sin(ra) + 0.5 * lc * ld * Math.sin(rc);
-            return area;
+
+            var pab = new window.gl.Vector3((pb.x + pa.x) / 2, (pb.y + pa.y) / 2, 0);
+            var pcd = new window.gl.Vector3((pd.x + pc.x) / 2, (pd.y + pc.y) / 2, 0);
+            pcd.sub(pab);
+            var rot = pcd.angleTo(new window.gl.Vector3(1, 0, 0));
+            rot = rot * 180 / 3.14;
+            if (rot > 90)
+                rot = 180 - rot;
+            return {
+                size: area,
+                rot: rot,
+                vec: pcd
+            };
         }
     </script>
 </body>
