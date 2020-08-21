@@ -454,6 +454,7 @@
             var h = new THREE.Vector3(1, 0, 0);
             var hv = new THREE.Vector3(0, 1, 0);
             window.config.line_percent_base = -1;
+            var line_rot = [];
             for (let i = 0; i < uiText.lines.length; i++) {
 
                 var a = vertices[uiText.lines_idcs[i][0]].clone();
@@ -506,7 +507,7 @@
                     setXY(uiText.lines[i], t, r);
                 }
 
-
+                line_rot.push(r);
 
                 //setTxt(uiText.lines[i], d + ",(" + (c.x | 0) + "," + (c.y | 0) + "," + ((c.z * 10000) | 0) + "):" + r + "°");
                 //setTxt(uiText.lines[i], d + ":" + r + "°"); later
@@ -515,7 +516,7 @@
             // show length
             for (var i = 0; i < uiText.lines.length; i++) {
                 var d = (uiText.line_length[i] / window.config.line_percent_base * 100) | 0;
-                setTxt(uiText.lines[i], d + "% : " + r + "°");
+                setTxt(uiText.lines[i], d + "% : " + line_rot[i] + "°");
             }
 
             window.config.face_percent_base = -1;
